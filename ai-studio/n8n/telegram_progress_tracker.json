@@ -1,0 +1,154 @@
+{
+  "name": "AI Studio — Postgres DB Watcher & UX Stream",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "update",
+        "schema": "public",
+        "table": "scenes",
+        "column": "pipeline_stage"
+      },
+      "id": "pg-trigger",
+      "name": "Listen_To_Supabase",
+      "type": "n8n-nodes-base.postgresTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 300 ],
+      "credentials": { "postgres": { "id": "supabase_db", "name": "Supabase Connection" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $input.item.json.old?.pipeline_stage }}",
+              "operation": "notEqual",
+              "value2": "={{ $input.item.json.new?.pipeline_stage }}"
+            }
+          ]
+        }
+      },
+      "id": "if-stage-changed",
+      "name": "Did_Stage_Change?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const row = $input.item.json.new || {};\n  const jobId = row.job_id || 'UNKNOWN';\n  const stage = row.pipeline_stage || 'PROCESSING';\n  const messageId = row.telegram_console_message_id || '';\n  const chatId = row.telegram_chat_id || '';\n  return [{ json: { job_id: jobId, stage: stage, message_id: messageId, chat_id: chatId } }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "extract-stage",
+      "name": "Parse_Pipeline_Stage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 500, 200 ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [ { "value1": "={{ $json.message_id !== '' && $json.chat_id !== '' }}", "value2": true } ]
+        }
+      },
+      "id": "if-has-console",
+      "name": "Has_Console_Mapped?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 750, 200 ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.stage }}",
+              "operation": "contains",
+              "value2": "video_"
+            }
+          ]
+        }
+      },
+      "id": "is-video-gen",
+      "name": "Is_Video_Generation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 1000, 200 ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "operation": "sendChatAction",
+        "action": "record_video"
+      },
+      "id": "ux-record-video",
+      "name": "Telegram_Action:_Recording",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1250, 100 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "operation": "sendChatAction",
+        "action": "typing"
+      },
+      "id": "ux-typing",
+      "name": "Telegram_Action:_Typing",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1250, 300 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ '⚙️ **Pipeline Console: Job ' + $json.job_id + '**\\n\\n> System is executing stage: `' + $json.stage + '`' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "edit-console",
+      "name": "Update_Console_Window",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1550, 200 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "noop",
+      "name": "Ignore",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [ 500, 500 ]
+    }
+  ],
+  "connections": {
+    "Listen_To_Supabase": { "main": [ [ { "node": "Did_Stage_Change?", "type": "main", "index": 0 } ] ] },
+    "Did_Stage_Change?": {
+      "main": [
+        [ { "node": "Parse_Pipeline_Stage", "type": "main", "index": 0 } ],
+        [ { "node": "Ignore", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Parse_Pipeline_Stage": { "main": [ [ { "node": "Has_Console_Mapped?", "type": "main", "index": 0 } ] ] },
+    "Has_Console_Mapped?": {
+      "main": [
+        [ { "node": "Is_Video_Generation?", "type": "main", "index": 0 } ],
+        [ { "node": "Ignore", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Is_Video_Generation?": {
+      "main": [
+        [ { "node": "Telegram_Action:_Recording", "type": "main", "index": 0 } ],
+        [ { "node": "Telegram_Action:_Typing", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Telegram_Action:_Recording": { "main": [ [ { "node": "Update_Console_Window", "type": "main", "index": 0 } ] ] },
+    "Telegram_Action:_Typing": { "main": [ [ { "node": "Update_Console_Window", "type": "main", "index": 0 } ] ] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "db-watcher-v2"
+}

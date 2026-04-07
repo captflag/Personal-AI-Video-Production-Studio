@@ -1,0 +1,149 @@
+{
+  "name": "AI Studio — Command Trigger (/create)",
+  "nodes": [
+    {
+      "parameters": { "updates": ["message"] },
+      "id": "tele-bot-listen",
+      "name": "Listen_For_Telegram_Message",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 300 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [ { "value1": "={{ $json.message?.text?.startsWith('/create ') }}", "value2": true } ]
+        }
+      },
+      "id": "if-is-create",
+      "name": "Is_Create_Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message?.chat?.id }}",
+        "operation": "sendChatAction",
+        "action": "typing"
+      },
+      "id": "ux-typing-start",
+      "name": "Telegram_Action:_Typing",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 500, 150 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const text = $input.item.json.message?.text || '';\n  const prompt = text.replace('/create ', '');\n  return [{ json: { prompt: prompt, chat_id: $input.item.json.message?.chat?.id || '' } }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "extract-prompt",
+      "name": "Extract_Script_Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 500, 350 ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "🎬 **Initialize Sequence Received!**\\n\\nSending prompt to FastAPI...\\n_Parsing concept: {{ $json.prompt }}_",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tele-ack",
+      "name": "Send_Acknowledgement",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 750, 350 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/jobs/start",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "raw_prompt", "value": "={{ $json.prompt }}" },
+            { "name": "chat_id", "value": "={{ $json.chat_id }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "start-fastapi",
+      "name": "Start_FastAPI_Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [ 1000, 350 ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [ { "value1": "={{ $json.error != undefined }}", "value2": true } ]
+        }
+      },
+      "id": "if-start-error",
+      "name": "Check_Start_Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 1250, 350 ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Extract_Script_Prompt').item.json.chat_id }}",
+        "text": "❌ **Failed to Start Backend!**\\nIs FastAPI running?\\nError: `{{ $json.error }}`",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tele-fail",
+      "name": "Send_Fatal_Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1500, 200 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Extract_Script_Prompt').item.json.chat_id }}",
+        "text": "✅ **Worker Initialized.**\\nJob ID: `{{ $json.job_id }}`\\nAgents are currently writing the script. Standby for Checkpoint 1.",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "tele-success",
+      "name": "Send_Success_Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1500, 500 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {},
+      "id": "ignore-msg",
+      "name": "Ignore_Standard_Messages",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [ 250, 500 ]
+    }
+  ],
+  "connections": {
+    "Listen_For_Telegram_Message": { "main": [ [ { "node": "Is_Create_Command", "type": "main", "index": 0 } ] ] },
+    "Is_Create_Command": {
+      "main": [
+        [ { "node": "Telegram_Action:_Typing", "type": "main", "index": 0 }, { "node": "Extract_Script_Prompt", "type": "main", "index": 0 } ],
+        [ { "node": "Ignore_Standard_Messages", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Extract_Script_Prompt": { "main": [ [ { "node": "Send_Acknowledgement", "type": "main", "index": 0 } ] ] },
+    "Send_Acknowledgement": { "main": [ [ { "node": "Start_FastAPI_Pipeline", "type": "main", "index": 0 } ] ] },
+    "Start_FastAPI_Pipeline": { "main": [ [ { "node": "Check_Start_Error", "type": "main", "index": 0 } ] ] },
+    "Check_Start_Error": {
+      "main": [
+        [ { "node": "Send_Fatal_Alert", "type": "main", "index": 0 } ],
+        [ { "node": "Send_Success_Confirmation", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "start-master-v2"
+}

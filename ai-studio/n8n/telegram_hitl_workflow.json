@@ -1,0 +1,247 @@
+{
+  "name": "AI Studio — Master HITL Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-studio-hitl",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-main",
+      "name": "Catch_FastAPI_Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [ 0, 300 ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.body?.stage }}",
+        "rules": {
+          "rules": [
+            { "value2": "CP1_SCRIPT" },
+            { "value2": "CP2_KEYFRAMES" },
+            { "value2": "DLQ_ERROR" }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "switch-stage",
+      "name": "Switch_By_Stage",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2.1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const body = $input.item.json.body || {};\n  return [{ \n    json: {\n      text: `🛑 *CP1: Script Sync*\\n\\nJob: <code>${body.job_id}</code>\\nScenes: ${body.scenes}\\nCharacters: ${body.characters}`,\n      job_id: body.job_id\n    }\n  }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "format-cp1",
+      "name": "Format_CP1_Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 550, 100 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const body = $input.item.json.body || {};\n  const urls = body.keyframe_urls || [];\n  const mediaGroup = urls.slice(0, 10).map((url, i) => ({\n    type: 'photo',\n    media: url,\n    caption: i === 0 ? `🖼️ *CP2: Keyframes*\\nJob: <code>${body.job_id}</code>` : '',\n    parse_mode: 'HTML'\n  }));\n  return [{ json: { media: mediaGroup, job_id: body.job_id } }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "format-cp2",
+      "name": "Format_MediaGroup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 550, 300 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const body = $input.item.json.body || {};\n  return [{ json: { text: `☠️ *DLQ Error*\\n\\nJob: <code>${body.job_id}</code>\\nStage: ${body.failed_stage}\\nError: ${body.last_error}` } }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "format-dlq",
+      "name": "Format_DLQ_Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 550, 500 ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "✅ Approve Script", "callbackData": "={{ 'APPROVE_' + $json.job_id }}" },
+                  { "text": "❌ Reject Job", "callbackData": "={{ 'REJECT_' + $json.job_id }}" }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "send-cp1",
+      "name": "Send_CP1_Prompt",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 850, 100 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "operation": "sendMediaGroup",
+        "chatId": "YOUR_CHAT_ID",
+        "media": "={{ $json.media }}"
+      },
+      "id": "send-cp2-media",
+      "name": "Send_CP2_Images",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 850, 300 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "Approval Controls for Keyframes 👆",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  { "text": "✅ Approve All Keyframes", "callbackData": "={{ 'APPROVE_' + $json.job_id }}" },
+                  { "text": "🔄 Force QA Pipeline", "callbackData": "={{ 'REGENERATE_' + $json.job_id }}" }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "send-cp2-btns",
+      "name": "Send_CP2_Buttons",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1100, 300 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "send-dlq",
+      "name": "Send_DLQ_Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 850, 500 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": { "updates": ["callback_query"] },
+      "id": "listen-callback",
+      "name": "Listen_For_Callback",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 800 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const cbData = $input.item.json.callbackQuery?.data;\n  let action = 'NONE';\n  let jobId = 'UNKNOWN';\n  if (cbData) {\n    action = cbData.split('_')[0] || action;\n    jobId = cbData.split('_')[1] || jobId;\n  }\n  return [{ json: { action, job_id: jobId } }];\n} catch(e) { return [{ json: { error: e.message } }]; }"
+      },
+      "id": "extract-callback",
+      "name": "Extract_Callback_Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 250, 800 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://host.docker.internal:8000/jobs/' + $json.job_id + '/resume' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "action", "value": "={{ $json.action }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "resume-fastapi",
+      "name": "Resume_FastAPI_Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [ 500, 800 ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [ { "value1": "={{ $json.error != undefined }}", "value2": true } ]
+        }
+      },
+      "id": "if-error",
+      "name": "Check_API_Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 750, 800 ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $node.Listen_For_Callback.json?.callbackQuery?.message?.chat?.id }}",
+        "messageId": "={{ $node.Listen_For_Callback.json?.callbackQuery?.message?.message_id }}",
+        "text": "✅ Callback Received. Pipeline is executing: {{ $json.action }}"
+      },
+      "id": "update-msg",
+      "name": "Update_Original_Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1000, 700 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "❌ CRITICAL: Failed to reach FastAPI worker! Error: {{ $json.error }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "fail-alert",
+      "name": "Send_HTTP_Crash_Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [ 1000, 950 ],
+      "credentials": { "telegramApi": { "id": "telegram_bot", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Catch_FastAPI_Webhook": { "main": [ [ { "node": "Switch_By_Stage", "type": "main", "index": 0 } ] ] },
+    "Switch_By_Stage": {
+      "main": [
+        [ { "node": "Format_CP1_Text", "type": "main", "index": 0 } ],
+        [ { "node": "Format_MediaGroup", "type": "main", "index": 0 } ],
+        [ { "node": "Format_DLQ_Alert", "type": "main", "index": 0 } ],
+        [ { "node": "Format_CP1_Text", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Format_CP1_Text": { "main": [ [ { "node": "Send_CP1_Prompt", "type": "main", "index": 0 } ] ] },
+    "Format_MediaGroup": { "main": [ [ { "node": "Send_CP2_Images", "type": "main", "index": 0 } ] ] },
+    "Send_CP2_Images": { "main": [ [ { "node": "Send_CP2_Buttons", "type": "main", "index": 0 } ] ] },
+    "Format_DLQ_Alert": { "main": [ [ { "node": "Send_DLQ_Alert", "type": "main", "index": 0 } ] ] },
+    "Listen_For_Callback": { "main": [ [ { "node": "Extract_Callback_Action", "type": "main", "index": 0 } ] ] },
+    "Extract_Callback_Action": { "main": [ [ { "node": "Resume_FastAPI_Worker", "type": "main", "index": 0 } ] ] },
+    "Resume_FastAPI_Worker": { "main": [ [ { "node": "Check_API_Error", "type": "main", "index": 0 } ] ] },
+    "Check_API_Error": {
+      "main": [
+        [ { "node": "Send_HTTP_Crash_Alert", "type": "main", "index": 0 } ],
+        [ { "node": "Update_Original_Message", "type": "main", "index": 0 } ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}

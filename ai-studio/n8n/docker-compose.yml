@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Kolkata
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - redis
+
+  # ─────────────────────────────────────────────
+  # Phase 4: Redis — ARQ Worker Queue Broker
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes  # Enable AOF persistence so jobs survive restarts
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Phase 4: ARQ Worker — replaces BackgroundTasks
+  # Run separately: arq backend.worker.WorkerSettings
+  # Or add as a service here (requires the backend image to be built first)
+  # ─────────────────────────────────────────────
+  # arq_worker:
+  #   build: ../backend
+  #   command: arq backend.worker.WorkerSettings
+  #   environment:
+  #     - REDIS_URL=redis://redis:6379
+  #   depends_on:
+  #     - redis
+  #   env_file:
+  #     - ../backend/.env
+
+volumes:
+  n8n_data:
+  redis_data:

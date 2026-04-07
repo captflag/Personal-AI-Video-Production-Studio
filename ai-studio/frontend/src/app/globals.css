@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* High-End Cinema Zinc Palette */
+  --bg-main: #f8fafc; /* Slate 50 */
+  --bg-card: rgba(255, 255, 255, 0.4);
+  --border-subtle: rgba(226, 232, 240, 0.5); /* Slate 200 */
+  --border-glass: rgba(255, 255, 255, 0.6);
+  --accent-primary: #4f46e5; /* Indigo 600 */
+  --accent-secondary: #7c3aed; /* Violet 600 */
+  --text-main: #020617; /* Zinc 950 */
+  --text-muted: #64748b; /* Slate 500 */
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--bg-main)] text-[var(--text-main)] antialiased selection:bg-indigo-100 selection:text-indigo-900;
+  }
+}
+
+@layer components {
+  /* The "Bento Box" Grid System */
+  .bento-grid {
+    @apply grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-8 p-8 max-w-[90rem] mx-auto auto-rows-auto;
+  }
+
+  /* Glassmorphism Card Utility */
+  .glass-card {
+    @apply bg-white/40 backdrop-blur-[40px] border border-white shadow-[0_8px_40px_-12px_rgba(0,0,0,0.03)] rounded-[2.5rem] overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)];
+  }
+
+  .glass-card:hover {
+    @apply shadow-[0_32px_80px_-20px_rgba(0,0,0,0.08)] border-white -translate-y-2;
+  }
+
+  /* Status Indicator for Agent Activity */
+  .agent-pulse {
+    @apply relative flex h-2.5 w-2.5 mr-2.5;
+  }
+  .agent-pulse span:nth-child(1) {
+    @apply animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75;
+  }
+  .agent-pulse span:nth-child(2) {
+    @apply relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)];
+  }
+}
+
+/* 3D Canvas Container */
+.hero-canvas {
+  @apply absolute inset-0 -z-10 pointer-events-none opacity-60;
+}
