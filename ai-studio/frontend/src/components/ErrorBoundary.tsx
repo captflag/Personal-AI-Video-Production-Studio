@@ -1,6 +1,4 @@
-"use client";
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
 
 interface Props {
   children?: ReactNode;
@@ -16,11 +14,11 @@ export class ErrorBoundary extends Component<Props, State> {
     hasError: false
   };
 
-  public static getDerivedStateFromError(_: Error): State {
+  public static getDerivedStateFromError(_error: Error): State {
     return { hasError: true };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
     console.warn("WebGL/Canvas gracefully degraded:", error);
   }
 

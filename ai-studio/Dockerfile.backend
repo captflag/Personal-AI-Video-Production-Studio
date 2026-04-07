@@ -1,0 +1,24 @@
+# Use a Python base image with Alpine or Debian
+FROM python:3.11-slim
+
+# Install system dependencies for MoviePy and FFmpeg
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements and install
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the backend code
+COPY backend/ ./backend/
+
+# Expose the FastAPI port
+EXPOSE 8000
+
+# We use a single Dockerfile but override the command 
+# in railway.json for the Worker vs the API
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

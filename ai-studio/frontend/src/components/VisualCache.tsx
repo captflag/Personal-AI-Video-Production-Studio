@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Maximize2, X, Download, ExternalLink, CameraOff, Play, Film, Cpu, CheckCircle2, RefreshCw } from "lucide-react";
 import { JobSceneRow } from "@/app/page";
@@ -124,14 +125,22 @@ export function VisualCache({ scenes, jobId, isLoading, activeView = "keyframes"
               {hasAsset ? (
                 <>
                   {activeView === "keyframes" ? (
-                    <motion.img
-                      src={assetUrl}
-                      alt={`Scene ${scene.scene_number}`}
-                      initial={{ scale: 1 }}
-                      whileHover={{ scale: 1.15, x: -8, y: -5 }}
-                      transition={{ duration: 1.2, ease: [0.23, 1, 0.32, 1] }}
-                      className="w-full h-full object-cover shadow-inner"
-                    />
+                    <div className="relative w-full h-full overflow-hidden">
+                      <motion.div
+                        initial={{ scale: 1 }}
+                        whileHover={{ scale: 1.15, x: -8, y: -5 }}
+                        transition={{ duration: 1.2, ease: [0.23, 1, 0.32, 1] }}
+                        className="w-full h-full"
+                      >
+                        <Image
+                          src={assetUrl || ""}
+                          alt={`Scene ${scene.scene_number}`}
+                          fill
+                          className="object-cover shadow-inner"
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                        />
+                      </motion.div>
+                    </div>
                   ) : (
                     <motion.div 
                       className="relative w-full h-full overflow-hidden"
@@ -304,10 +313,12 @@ export function VisualCache({ scenes, jobId, isLoading, activeView = "keyframes"
             >
               {(activeView === "keyframes" ? selectedScene.keyframe_url : selectedScene.motion_url) ? (
                 activeView === "keyframes" ? (
-                  <img
-                    src={selectedScene.keyframe_url}
+                  <Image
+                    src={selectedScene.keyframe_url || ""}
                     alt={`Scene ${selectedScene.scene_number}`}
-                    className="w-full h-full object-contain"
+                    fill
+                    className="object-contain"
+                    priority
                   />
                 ) : (
                   <video

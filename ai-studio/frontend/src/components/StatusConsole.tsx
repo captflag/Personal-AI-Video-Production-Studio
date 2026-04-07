@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Terminal, Activity, FileJson, ChevronDown, ChevronRight, Cpu } from "lucide-react";
+import { Terminal, Activity, ChevronDown, ChevronRight, Cpu } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +8,7 @@ interface LogEntry {
   agent: string;
   message: string;
   timestamp: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
 }
 
 export const StatusConsole = ({ logs }: { logs: LogEntry[] }) => {
