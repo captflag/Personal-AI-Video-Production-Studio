@@ -40,7 +40,7 @@ function SubmitButton() {
 
 export function LoginForm() {
   const [state, formAction] = useFormState<FormState, FormData>(
-    loginAction as (state: FormState, formData: FormData) => Promise<FormState>,
+    loginAction as unknown as (state: FormState, formData: FormData) => Promise<FormState>,
     initialState
   );
 
