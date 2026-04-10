@@ -11,7 +11,7 @@ tenacity==8.2.3
 
 # Agent Orchestration (LangGraph + LangChain)
 langgraph==0.0.31
-langchain-core==0.1.40
+langchain-core>=0.1.42
 langchain-groq==0.1.2
 
 # Database Connectivity
