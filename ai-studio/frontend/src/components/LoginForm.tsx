@@ -6,7 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const initialState: { error: Record<string, string[] | undefined> } = {
+interface FormState {
+  error: Record<string, string[] | undefined>;
+}
+
+const initialState: FormState = {
   error: {},
 };
 
@@ -35,7 +39,10 @@ function SubmitButton() {
 }
 
 export function LoginForm() {
-  const [state, formAction] = useFormState(loginAction as Parameters<typeof useFormState>[0], initialState);
+  const [state, formAction] = useFormState<FormState, FormData>(
+    loginAction as (state: FormState, formData: FormData) => Promise<FormState>,
+    initialState
+  );
 
   return (
     <motion.div
@@ -69,7 +76,7 @@ export function LoginForm() {
                 className={cn(
                   "w-full h-14 bg-white/50 border border-slate-200 rounded-2xl pl-14 pr-6 text-sm font-medium transition-all",
                   "focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none",
-                  state?.error?.email ? "border-red-500 focus:ring-red-500/10 focus:border-red-500" : ""
+                  state.error?.email ? "border-red-500 focus:ring-red-500/10 focus:border-red-500" : ""
                 )}
               />
             </div>
@@ -88,14 +95,14 @@ export function LoginForm() {
                 className={cn(
                   "w-full h-14 bg-white/50 border border-slate-200 rounded-2xl pl-14 pr-6 text-sm font-medium transition-all",
                   "focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none",
-                  state?.error?.password ? "border-red-500 focus:ring-red-500/10 focus:border-red-500" : ""
+                  state.error?.password ? "border-red-500 focus:ring-red-500/10 focus:border-red-500" : ""
                 )}
               />
             </div>
           </div>
 
           <AnimatePresence mode="wait">
-            {state?.error?.form && (
+            {state.error?.form && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
