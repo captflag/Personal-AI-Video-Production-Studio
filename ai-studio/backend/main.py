@@ -35,7 +35,7 @@ from backend.db import get_pool, close_pool
 # ─────────────────────────────────────────────────────────────
 API_KEY = os.getenv("API_KEY")
 
-REQUIRED_SECRETS = ["API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "HUGGINGFACE_API_KEY", "ELEVENLABS_API_KEY"]
+REQUIRED_SECRETS = ["API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "HUGGINGFACE_API_KEY"]
 if os.getenv("ENVIRONMENT") == "production":
     if missing := [k for k in REQUIRED_SECRETS if not os.getenv(k)]:
         raise RuntimeError(f"🔥 FATAL: Missing Critical Secrets for Production: {missing}")
