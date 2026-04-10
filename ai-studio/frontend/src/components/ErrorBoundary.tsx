@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import React, { Component, ReactNode } from "react";
 
 interface Props {
   children?: ReactNode;
@@ -14,11 +14,11 @@ export class ErrorBoundary extends Component<Props, State> {
     hasError: false
   };
 
-  public static getDerivedStateFromError(_error: Error): State {
+  public static getDerivedStateFromError(): State {
     return { hasError: true };
   }
 
-  public componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error) {
     console.warn("WebGL/Canvas gracefully degraded:", error);
   }
 

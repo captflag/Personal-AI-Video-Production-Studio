@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Play, 
   Sparkles, 
   BarChart3, 
-  Plus, 
   Video, 
   Camera,
   Cpu
@@ -19,6 +18,7 @@ import { VisualCache } from "@/components/VisualCache";
 import { cn } from "@/lib/utils";
 import { useAnalytics } from "@/lib/useAnalytics";
 import { useToast } from "@/components/ToastProvider";
+import { logoutAction } from "@/app/login/actions";
 const HeroGlobe = dynamic(() => import("@/components/HeroGlobe").then(mod => mod.HeroGlobe), { 
   ssr: false,
   loading: () => (
@@ -38,6 +38,18 @@ export interface JobSceneRow {
   keyframe_url?: string;
   motion_url?: string;
   status?: string;
+  lighting_prompt?: string;
+  light_source_origin?: string;
+  spatial_layout?: string;
+  motion_intensity?: string;
+}
+
+interface JobLogEntry {
+  id: string;
+  agent: string;
+  message: string;
+  timestamp: string;
+  payload?: Record<string, unknown>;
 }
 
 interface JobStatusPayload {
@@ -45,10 +57,10 @@ interface JobStatusPayload {
   pipeline_stage?: string;
   video_url?: string;
   scenes?: JobSceneRow[];
-  logs?: { id: string; agent: string; message: string; timestamp: string }[];
+  logs?: JobLogEntry[];
 }
 
-const fetchJobStatus = async (jobId: string) => {
+const fetchJobStatus = async (jobId: string): Promise<JobStatusPayload | null> => {
   if (!jobId) return null;
   
   const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
@@ -61,14 +73,10 @@ const fetchJobStatus = async (jobId: string) => {
     throw new Error("Failed to fetch job status");
   }
   
-  const data = await response.json();
+  const row = (await response.json()) as Record<string, unknown>;
   
-  // Transform backend response to match frontend expectations
-  const row = data as Record<string, any>;
-  
-  // If backend provides logs, use them; otherwise create the stage log
-  const incomingLogs = row.logs || [];
-  const stageLog = { 
+  const incomingLogs = (row.logs as JobLogEntry[]) || [];
+  const stageLog: JobLogEntry = { 
     id: `stage-${String(row.pipeline_stage || "init")}`, 
     agent: "Pipeline", 
     message: `Current Stage: ${String(row.pipeline_stage ?? "Orchestrating")}`, 
@@ -77,14 +85,13 @@ const fetchJobStatus = async (jobId: string) => {
 
   return {
     ...row,
-    // Merge the stage tracker with any detailed agent tool logs from the backend
     logs: [stageLog, ...incomingLogs],
   } as JobStatusPayload;
 };
 
 export default function Home() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [logs, setLogs] = useState<{id: string, agent: string, message: string, timestamp: string}[]>([]);
+  const [logs, setLogs] = useState<JobLogEntry[]>([]);
   const [lastStage, setLastStage] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [isStarting, setIsStarting] = useState(false);
@@ -118,32 +125,32 @@ export default function Home() {
     },
   });
 
-  // PRECISION TELEMETRY: Accumulate logs as the pipeline moves
-  useEffect(() => {
-    // Handle multi-agent logs from binary/JSON payload
-    if (job?.logs && job.logs.length > 0) {
+  const handleJobUpdates = useCallback((currentJob: JobStatusPayload | null | undefined, currentLastStage: string) => {
+    if (!currentJob) return;
+    if (currentJob.logs && currentJob.logs.length > 0) {
       setLogs((prev) => {
         const existingIds = new Set(prev.map(l => l.id));
-        const newLogs = job.logs!.filter(l => !existingIds.has(l.id));
+        const newLogs = currentJob.logs!.filter(l => !existingIds.has(l.id));
         if (newLogs.length === 0) return prev;
         return [...prev, ...newLogs];
       });
     }
-
-    const stage = job?.pipeline_stage;
-    if (stage && stage !== lastStage) {
+    const stage = currentJob.pipeline_stage;
+    if (stage && stage !== currentLastStage) {
       setLastStage(stage);
-      
-      // Toast specific critical stages to allow non-blocking monitoring
-      if (job?.status === "HITL_PAUSE") {
+      if (currentJob.status === "HITL_PAUSE") {
         toast({ title: "Human-In-The-Loop Required", description: "The agent pipeline has paused for your approval.", type: "agent" });
-      } else if (job?.status === "COMPLETED") {
+      } else if (currentJob.status === "COMPLETED") {
         setShowSuccess(true);
         trackEvent("job_completed", { jobId: activeJobId });
         toast({ title: "Production Completed", description: "Your 11-agent episode is rendered.", type: "success" });
       }
     }
-  }, [job?.pipeline_stage, job?.status, lastStage]);
+  }, [activeJobId, toast, trackEvent]);
+
+  useEffect(() => {
+    handleJobUpdates(job, lastStage);
+  }, [job, lastStage, handleJobUpdates]);
 
   const handleSubmitBlueprint = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +231,13 @@ export default function Home() {
           <a href="#" className="hover:text-slate-900 transition-colors">Archive</a>
         </div>
         <div className="flex items-center gap-4 px-2">
+          <button
+            type="button"
+            onClick={() => logoutAction()}
+            className="text-slate-500 hover:text-slate-900 text-sm font-bold transition-all px-4"
+          >
+            Logout
+          </button>
           <button className="bg-slate-900 text-white text-sm font-bold px-6 py-2.5 rounded-full hover:bg-slate-800 transition-all shadow-xl active:scale-95 border border-white/10 hover:border-white/20">
             Connect n8n
           </button>
