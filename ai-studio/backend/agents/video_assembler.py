@@ -61,25 +61,23 @@ async def agent_video_assembler(state: UniversalGraphState) -> UniversalGraphSta
                 continue
                 
             # High Fidelity: Pull the deepest processed video artifact (Interpolated -> Temporal -> Motion)
-                
-            aud_path = os.path.join(work_dir, f"scene_{scene_num}.mp3")
-            await asyncio.to_thread(download_asset, aud_url, aud_path)
-            audio = AudioFileClip(aud_path)
+            motion_url = scene.get("motion_video_url")
+            img_url = scene.get("keyframe_url")
             
             # Precision Heartbeat: Update UI for each scene assembly
-            await sync_pipeline_state(job_id, state, "FINAL_ASSEMBLY", status_message=f"Processing Scene {scene_num}/{len(scenes)} Video & Audio...")
+            await sync_pipeline_state(job_id, state, "FINAL_ASSEMBLY", status_message=f"Processing Scene {scene_num}/{len(scenes)} Video...")
 
             if motion_url and "FAILED" not in motion_url:
                 # MOTION MODE: Use the SVD .mp4 clip
                 vid_path = os.path.join(work_dir, f"scene_{scene_num}_motion.mp4")
                 await asyncio.to_thread(download_asset, motion_url, vid_path)
                 from moviepy.editor import VideoFileClip
-                clip = VideoFileClip(vid_path).set_audio(audio)
+                clip = VideoFileClip(vid_path)
             elif img_url and "FAILED" not in img_url:
                 # STILL MODE: Fallback to animated stills
                 img_path = os.path.join(work_dir, f"scene_{scene_num}.png")
                 await asyncio.to_thread(download_asset, img_url, img_path)
-                clip = ImageClip(img_path).set_duration(audio.duration).set_audio(audio)
+                clip = ImageClip(img_path).set_duration(5.0)
             else:
                 logger.warning("scene_skipped_no_visual", scene=scene_num, job_id=job_id)
                 continue
@@ -108,7 +106,7 @@ async def agent_video_assembler(state: UniversalGraphState) -> UniversalGraphSta
             final_path, 
             fps=24, 
             codec="libx264", 
-            audio_codec="aac",
+            audio=False,
             bitrate="8000k",
             preset="medium",
             # PERFORMANCE: Increased threads to 4 for faster Zero-GPU rendering

@@ -35,7 +35,7 @@ from backend.db import get_pool, close_pool
 # ─────────────────────────────────────────────────────────────
 API_KEY = os.getenv("API_KEY")
 
-REQUIRED_SECRETS = ["API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "HUGGINGFACE_API_KEY"]
+REQUIRED_SECRETS = ["API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "HUGGINGFACE_API_KEY", "ELEVENLABS_API_KEY"]
 if os.getenv("ENVIRONMENT") == "production":
     if missing := [k for k in REQUIRED_SECRETS if not os.getenv(k)]:
         raise RuntimeError(f"🔥 FATAL: Missing Critical Secrets for Production: {missing}")
@@ -188,6 +188,8 @@ class StartJobRequest(BaseModel):
     raw_prompt: str = Field(..., min_length=10, max_length=2000, description="The user's scene description")
     chat_id: str = Field(..., min_length=1, max_length=50, description="Telegram chat ID")
     character_design: Optional[str] = Field(None, max_length=1000, description="The blueprint for the main character")
+    character_name: Optional[str] = Field(None, max_length=100, description="Explicit character name to enforce")
+    character_reference_url: Optional[str] = Field(None, max_length=2000, description="URL to character image for Face Locking (PuLID/InstantID)")
 
 
 class ResumeJobRequest(BaseModel):
@@ -211,18 +213,25 @@ async def _enqueue_or_fallback(request: Request, task_name: str, background_task
 # ─────────────────────────────────────────────────────────────
 # Async fallback functions (used when Redis is offline)
 # ─────────────────────────────────────────────────────────────
-async def _fallback_run_pipeline(job_id: str, prompt: str, chat_id: str, character_design: Optional[str] = None):
+async def _fallback_run_pipeline(
+    job_id: str, prompt: str, chat_id: str, 
+    character_design: Optional[str] = None,
+    character_name: Optional[str] = None,
+    character_reference_url: Optional[str] = None
+):
     logger.info("fallback_worker_started", job_id=job_id)
     try:
         from backend.graph import agent_pipeline
         characters = []
-        if character_design:
+        if character_design or character_name or character_reference_url:
+            c_name = character_name or "Main Hero"
+            c_desc = character_design or f"Hyper-realistic cinematic depiction of {c_name}"
             characters.append({
                 "id": "hero",
-                "name": "Main Hero",
-                "physical_description": character_design,
-                "outfit": "Default",
-                "locked_face_url": None,
+                "name": c_name,
+                "physical_description": c_desc,
+                "outfit": "Default cinematic outfit",
+                "locked_face_url": character_reference_url,
                 "voice_id": None
             })
 
@@ -328,6 +337,8 @@ async def start_pipeline(req: StartJobRequest, request: Request, background_task
         prompt=req.raw_prompt,
         chat_id=req.chat_id,
         character_design=req.character_design,
+        character_name=req.character_name,
+        character_reference_url=req.character_reference_url,
     )
 
     return {

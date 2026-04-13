@@ -21,6 +21,7 @@ class SceneSchema(BaseModel):
     script_text: str = Field(description="The physical dialogue and action blocking to occur in the scene.")
     spatial_layout: str = Field(description="Detailed 3D composition: Foreground vs Midground vs Background. Define exactly where the character is standing relative to the camera.")
     camera_directives: str = Field(description="Cinematic movement instructions like 'Dolly-In', 'Slow Parallax Pan', or 'Wide Angle Low Perspective' to emphasize 3D volume.")
+    active_characters: List[str] = Field(description="Strict list of Character IDs (e.g. ['char_1']) present in this scene. Use empty list [] for landscape/establishing shots to prevent human hallucinations.")
 
 class DirectorOutput(BaseModel):
     characters: List[CharacterSchema]
@@ -54,6 +55,8 @@ Your job is to expand this into a production-ready script with extreme SPATIAL A
 2. Write a 3-to-6 scene script.
 3. For every scene, you MUST define the SPATIAL LAYOUT: explicitly describe what is in the Foreground, Midground, and Background. 
 4. Include CAMERA DIRECTIVES to emphasize 3D depth (e.g., dolly-in, parallax pan, low wide perspective).
+5. CRITICAL ANTI-HALLUCINATION RULE: Never include quotes, speech, dialogue, or text overlays in the script_text. Doing so causes the AI image generators to hallucinate random text/speech bubbles. Focus ONLY on pure visual physical actions.
+6. STRICT CHARACTER CONTINUITY: Populate `active_characters` array solely with the IDs of characters you invented. Never hallucinate random background people.
 
 Previous Episode Context (if any):
 {state.get('memory_context', 'None')}
@@ -83,6 +86,7 @@ Previous Episode Context (if any):
             "script_text": s.script_text,
             "spatial_layout": s.spatial_layout,
             "camera_directives": s.camera_directives,
+            "active_characters": getattr(s, "active_characters", []),
             "camera_angle": None,
             "lighting_prompt": None,
             "hook_score": None,

@@ -59,6 +59,94 @@ async def query_fal_flux_schnell(prompt: str) -> bytes:
         image_response.raise_for_status()
         return image_response.content
 
+async def query_fal_flux_pulid(prompt: str, reference_url: str) -> bytes:
+    """
+    Calls fal.ai Flux PuLID for ultra-fidelity Character Identity Locking.
+    """
+    api_key = os.getenv("FAL_KEY")
+    if not api_key:
+        raise ValueError("FAL_KEY missing in .env")
+
+    headers = {
+        "Authorization": f"Key {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "prompt": prompt,
+        "reference_images": [{"image_url": reference_url}],
+        "image_size": {
+            "width": 1280,
+            "height": 720
+        },
+        "num_inference_steps": 20,
+        "enable_safety_checker": True
+    }
+    
+    logger.info("fal_flux_pulid_request_sent", prompt=prompt[:100])
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post("https://fal.run/fal-ai/flux-pulid", headers=headers, json=payload, timeout=90)
+        
+        if response.status_code != 200:
+            error_msg = response.text[:1000]
+            logger.error("fal_flux_pulid_error", status=response.status_code, detail=error_msg)
+            raise Exception(f"fal.ai Flux PuLID Error {response.status_code}: {error_msg}")
+
+        result = response.json()
+        image_url = result.get("images", [{}])[0].get("url")
+        if not image_url:
+            raise KeyError(f"No image URL found in fal PuLID response. Keys: {list(result.keys())}")
+            
+        image_response = await client.get(image_url, timeout=30)
+        image_response.raise_for_status()
+        return image_response.content
+
+# --- OpenAI: DALL-E 3 (Requested Upgrade) ---
+async def query_openai_dalle3(prompt: str) -> bytes:
+    """
+    Calls OpenAI DALL-E 3 endpoint for highest fidelity keyframe rendering limitlessly.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY missing in .env")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    # OpenAI API expects prompts max 4000 chars, DALL-E handles spatial constraints well.
+    payload = {
+        "model": "dall-e-3",
+        "prompt": prompt[:3900], 
+        "n": 1,
+        "size": "1024x1792", # cinematic portrait (Wait, 1024 width / 1792 height) 
+        # Standard video requires 1792x1024.
+        "response_format": "url"
+    }
+    payload["size"] = "1792x1024" # 16:9 cinematic
+    payload["quality"] = "hd"
+    
+    logger.info("openai_dalle3_request_sent", prompt=prompt[:100])
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post("https://api.openai.com/v1/images/generations", headers=headers, json=payload, timeout=90)
+        
+        if response.status_code != 200:
+            error_msg = response.text[:1000]
+            logger.error("openai_dalle3_error", status=response.status_code, detail=error_msg)
+            raise Exception(f"OpenAI DALL-E 3 Error {response.status_code}: {error_msg}")
+
+        result = response.json()
+        image_url = result.get("data", [{}])[0].get("url")
+        if not image_url:
+            raise KeyError(f"No image URL found in OpenAI response. Keys: {list(result.keys())}")
+            
+        image_response = await client.get(image_url, timeout=30)
+        image_response.raise_for_status()
+        return image_response.content
+
 # --- Risk 1 & Risk 2: API Rate Limits & InstantID Routing ---
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=20))
@@ -176,9 +264,24 @@ async def process_scene(
             # Truncate script text to keep prompts manageable
             safe_script_text = script_text.replace("\n", " ")[:500]
 
+            active_character_ids = scene.get("active_characters", [])
+
             for char in characters:
+                char_id = str(char.get("id", ""))
                 name = str(char.get("name", "")).lower()
-                if name and name in script_text_lower:
+                
+                # Strict adherence to Director's active characters constraint
+                is_active = False
+                if active_character_ids is not None and len(active_character_ids) > 0:
+                    if char_id in active_character_ids or char.get("name") in active_character_ids:
+                        is_active = True
+                else:
+                    # Fallback to precise regex boundaries if director array is mysteriously empty
+                    import re
+                    if name and re.search(r'\b' + re.escape(name) + r'\b', script_text_lower):
+                        is_active = True
+
+                if is_active:
                     # Check for InstantID presence
                     if char.get("locked_face_url"):
                         has_locked_face = True
@@ -208,19 +311,30 @@ async def process_scene(
                 f"Spatial Layout: {spatial_layout}. Camera Movement: {camera_directives}. "
                 f"Action: {safe_script_text}. {char_chunk}. "
                 "Masterpiece, 8k resolution, photorealistic, intricate textures, hyper-realistic, "
-                "depth of field, atmospheric scattering, 3D spatial cues, volumetric light rays, parallax depth."
+                "depth of field, atmospheric scattering, 3D spatial cues, volumetric light rays, parallax depth. "
+                "CRITICAL REQUIREMENTS: NO TEXT, NO WATERMARKS, NO UI ELEMENTS, NO SPEECH BUBBLES, NO MUTATIONS, PURE CINEMA."
             )
 
             # Execute Generation: Quad-Level Fallback (Master Load Balancer)
             image_bytes = None
             
-            # Level 1: fal.ai Flux 1 [schnell] (Premium High Speed)
+            # Level 1: Primary Generation Route (OpenAI DALL-E 3 / fal PuLID)
             try:
-                if os.getenv("FAL_KEY"):
-                    logger.info("fal_flux_attempted", scene_number=scene.get("scene_number"))
+                # If there's an explicit face reference to lock, we MUST route to fal.ai PuLID.
+                # OpenAI DALL-E 3 does not structurally support Image-to-Image Identity locking.
+                if has_locked_face and locked_face_url and os.getenv("FAL_KEY"):
+                    logger.info("fal_flux_pulid_attempted", scene_number=scene.get("scene_number"))
+                    image_bytes = await query_fal_flux_pulid(prompt, locked_face_url)
+                elif os.getenv("OPENAI_API_KEY"):
+                    # Standard execution overrides to the user-requested OpenAI DALL-E 3
+                    logger.info("openai_dalle3_attempted", scene_number=scene.get("scene_number"))
+                    image_bytes = await query_openai_dalle3(prompt)
+                elif os.getenv("FAL_KEY"):
+                    # Fallback to Fal Flux Schnell if OpenAI is suddenly missing
+                    logger.info("fal_flux_schnell_attempted", scene_number=scene.get("scene_number"))
                     image_bytes = await query_fal_flux_schnell(prompt)
             except Exception as e:
-                logger.warning("fal_flux_failed", error=str(e), scene_number=scene.get("scene_number"))
+                logger.warning("primary_generator_failed", error=str(e), scene_number=scene.get("scene_number"))
 
             # Level 2: NVIDIA NIM SDXL (Resilience)
             if not image_bytes:

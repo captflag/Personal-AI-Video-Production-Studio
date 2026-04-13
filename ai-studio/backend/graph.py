@@ -265,7 +265,7 @@ def hitl_router(state: UniversalGraphState) -> str:
     
     if res.data and len(res.data) > 0:
         logger.info("hitl_gate_passed", job_id=state.get("job_id"), approved_count=len(res.data))
-        return "vocal_synthesizer"
+        return "video_alchemist"
     
     # If the operator clicked the main UI button without selecting individual scenes,
     # we auto-approve all KEYFRAME_READY scenes to avoid an infinite recursion loop!
@@ -274,7 +274,7 @@ def hitl_router(state: UniversalGraphState) -> str:
         updated = supabase.table("scenes").update({"status": "APPROVED"}).eq("job_id", state.get("job_id")).eq("status", "KEYFRAME_READY").execute()
         if updated.data and len(updated.data) > 0:
             logger.info("hitl_gate_passed", job_id=state.get("job_id"), auto_approved_count=len(updated.data))
-            return "vocal_synthesizer"
+            return "video_alchemist"
     except Exception as e:
         logger.error("hitl_gate_auto_approve_failed", error=str(e))
         
